@@ -1,0 +1,1190 @@
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AssetTracker · Fuel Log Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#FAFAFB; --panel:#FFFFFF; --panel-2:#F4F5F7; --border:#E7E9EE;
+    --amber:#D97706; --teal:#0E9F6E; --red:#E11D48; --blue:#2563EB; --silver:#64748B;
+    --text:#1C2130; --muted:#8A93A6;
+  }
+  *{box-sizing:border-box;}
+  html{overflow-x:hidden;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;overflow-x:hidden;}
+  .wrap{max-width:1240px;margin:0 auto;padding:30px 20px 60px;width:100%;}
+
+  header{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:24px;flex-wrap:wrap;}
+  .brand-eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.18em;color:var(--amber);text-transform:uppercase;margin:0 0 4px;}
+  h1{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:34px;letter-spacing:.01em;margin:0;color:var(--text);}
+  h1 span{color:var(--muted);font-weight:600;}
+
+  .upload-group{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;}
+  .upload-btn, .btn{
+    display:flex;align-items:center;gap:9px;
+    background:var(--panel);border:1.5px solid var(--border);
+    color:var(--text);padding:12px 18px;border-radius:12px;
+    font-family:'Inter',sans-serif;font-size:13.5px;font-weight:600;
+    cursor:pointer;transition:.15s border-color, .15s box-shadow, .15s transform;
+    white-space:nowrap;box-shadow:0 1px 2px rgba(20,20,43,.04);
+  }
+  .upload-btn:hover,.btn:hover:not(:disabled){border-color:var(--blue);box-shadow:0 4px 14px rgba(37,99,235,.12);transform:translateY(-1px);}
+  .upload-btn.uploaded{border-color:var(--teal);background:#EEFBF5;color:#0B7A54;}
+  .btn.primary{background:var(--blue);color:#fff;border-color:var(--blue);}
+  .btn.primary:hover:not(:disabled){background:#1D4ED8;}
+  .btn.primary:disabled{opacity:.4;cursor:not-allowed;box-shadow:none;transform:none;}
+  .btn.mini{padding:7px 12px;font-size:12px;border-radius:8px;}
+  .btn.danger{color:var(--red);border-color:#F7C7D0;}
+  .btn.danger:hover{background:#FDE8ED;border-color:var(--red);}
+  .btn.ghost{background:var(--panel-2);}
+  input[type=file]{display:none;}
+  .status-row{display:flex;flex-direction:column;gap:3px;align-items:flex-end;margin-top:8px;}
+  .data-status{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);}
+  .data-status.live{color:var(--teal);font-weight:600;}
+  .data-status.err{color:var(--red);font-weight:600;}
+
+  /* ===== Page nav ===== */
+  .page-nav{display:flex;gap:8px;margin-bottom:22px;border-bottom:1.5px solid var(--border);}
+  .page-nav-btn{
+    background:none;border:none;padding:12px 4px;margin-right:22px;
+    font-family:'Rajdhani',sans-serif;font-weight:700;font-size:16px;letter-spacing:.01em;
+    color:var(--muted);cursor:pointer;position:relative;top:1.5px;
+    border-bottom:2.5px solid transparent;transition:.15s color;
+  }
+  .page-nav-btn:hover{color:var(--text);}
+  .page-nav-btn.active{color:var(--blue);border-bottom-color:var(--blue);}
+  .page-view{display:none;}
+  .page-view.active{display:block;}
+
+  .grid{display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:start;}
+  .grid > .panel{min-width:0;}
+  @media (max-width:860px){.grid{grid-template-columns:1fr;}}
+
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:0 1px 3px rgba(20,20,43,.03);}
+  .panel-title{font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 12px;}
+  .panel-head-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;}
+  .panel-head-row .panel-title{margin:0;}
+
+  .search-box{width:100%;background:var(--panel-2);border:1.5px solid var(--border);color:var(--text);padding:12px 14px;border-radius:12px;font-size:14px;font-family:'Inter',sans-serif;margin-bottom:14px;}
+  .search-box:focus{outline:none;border-color:var(--blue);background:#fff;}
+  .search-box::placeholder{color:var(--muted);}
+
+  .vehicle-list{max-height:600px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;}
+  .vehicle-item{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-radius:12px;cursor:pointer;border:1.5px solid var(--border);background:var(--panel-2);transition:.12s all;gap:10px;}
+  .vehicle-item:hover{border-color:var(--blue);background:#EFF4FF;}
+  .vehicle-item.active{background:#EAF7F0;border-color:var(--teal);}
+  .vehicle-item .plate{font-family:'JetBrains Mono',monospace;font-size:13.5px;font-weight:600;}
+  .vehicle-item .count{font-size:11px;color:var(--muted);margin-top:2px;}
+  .vehicle-item .badges{display:flex;flex-direction:column;gap:4px;align-items:flex-end;}
+  .vehicle-item .badge{font-size:10.5px;font-weight:700;color:var(--teal);background:#DDF6E8;padding:2px 8px;border-radius:20px;white-space:nowrap;}
+  .vehicle-item .badge.best{color:var(--amber);background:#FEF3E2;}
+  .empty-list{color:var(--muted);font-size:13.5px;padding:20px 4px;text-align:center;}
+
+  .details-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:440px;color:var(--muted);text-align:center;gap:12px;}
+  .details-empty svg{opacity:.35;}
+  .details-empty .big{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:20px;color:var(--text);}
+
+  .vehicle-header{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;margin-bottom:20px;padding-bottom:18px;border-bottom:1px dashed var(--border);}
+  .vehicle-header .plate-big{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:28px;letter-spacing:.02em;}
+  .vehicle-header .meta{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--muted);margin-top:4px;}
+  .tank-chip{display:inline-flex;align-items:center;gap:6px;margin-top:10px;background:#EFF4FF;color:var(--blue);border:1px solid #D6E4FF;padding:6px 12px;border-radius:20px;font-size:12.5px;font-weight:600;font-family:'JetBrains Mono',monospace;}
+  .tank-chip.none{background:var(--panel-2);color:var(--muted);border-color:var(--border);}
+  .best-chip{display:inline-flex;align-items:center;gap:6px;margin-top:10px;margin-left:8px;background:#FEF3E2;color:var(--amber);border:1px solid #FBE0B0;padding:6px 12px;border-radius:20px;font-size:12.5px;font-weight:600;font-family:'JetBrains Mono',monospace;}
+
+  .gauge-wrap{display:flex;flex-direction:column;align-items:center;gap:2px;}
+  .gauge-reading{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:16px;margin-top:-8px;}
+  .gauge-label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);}
+  .needle{transform-origin:100px 100px;transition:transform 1s cubic-bezier(.22,1,.36,1);}
+
+  .refill-cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:22px;}
+  @media (max-width:560px){.refill-cards{grid-template-columns:1fr;}}
+  .refill-card{background:var(--panel-2);border:1.5px solid var(--border);border-radius:14px;padding:18px;position:relative;overflow:hidden;}
+  .refill-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:5px;}
+  .refill-card.rank-1::before{background:var(--amber);}
+  .refill-card.rank-2::before{background:var(--teal);}
+  .refill-card.rank-3::before{background:var(--blue);}
+  .refill-eyebrow{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+  .refill-value{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:30px;line-height:1;color:var(--text);}
+  .refill-value small{font-family:'Inter',sans-serif;font-weight:500;font-size:13px;color:var(--muted);margin-left:4px;}
+  .refill-date{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);margin-top:9px;}
+  .refill-tag{display:inline-block;margin-top:11px;font-size:10.5px;font-weight:700;padding:4px 10px;border-radius:20px;font-family:'Inter',sans-serif;}
+  .tag-low{background:#FDE8ED;color:var(--red);}
+  .tag-mid{background:#FEF3E2;color:var(--amber);}
+  .tag-ok{background:#E1F8ED;color:var(--teal);}
+  .tag-full{background:#DDF6E8;color:var(--teal);}
+
+  .table-wrap{border:1.5px solid var(--border);border-radius:14px;overflow:hidden;}
+  table{width:100%;border-collapse:collapse;}
+  thead th{background:var(--panel-2);text-align:left;padding:11px 14px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;}
+  tbody td{padding:10px 14px;font-size:13px;border-bottom:1px solid var(--border);white-space:nowrap;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:#FAFBFD;}
+  tbody tr.row-best{background:#FFFBEF;}
+  td.val{font-family:'JetBrains Mono',monospace;font-weight:600;}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:9px;}
+  .table-scroll{max-height:360px;overflow-y:auto;overflow-x:auto;}
+  .no-log{color:var(--muted);font-size:13.5px;padding:24px;text-align:center;background:var(--panel-2);border-radius:14px;}
+  .star-tag{color:var(--amber);font-weight:700;font-size:11px;}
+
+  /* ===== Mileage calculator ===== */
+  .calc-panel{background:var(--panel-2);border:1.5px solid var(--border);border-radius:14px;padding:18px;margin-bottom:20px;}
+  .calc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;}
+  .field{display:flex;flex-direction:column;gap:5px;min-width:0;}
+  .field label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;}
+  .field input, .field select{background:#fff;border:1.5px solid var(--border);border-radius:9px;padding:9px 10px;font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:600;color:var(--text);width:100%;}
+  .field input:focus, .field select:focus{outline:none;border-color:var(--blue);}
+  .field input[readonly]{background:#EFF4FF;color:var(--blue);border-color:#D6E4FF;}
+  .field-note{font-size:10.5px;color:var(--muted);margin-top:2px;}
+  .field-note.warn{color:var(--red);font-weight:600;}
+  .calc-divider{height:1px;background:var(--border);margin:16px 0;}
+  .calc-results{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:14px;}
+  .result-box{background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:12px 14px;}
+  .result-box .rlabel{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+  .result-box .rvalue{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:22px;margin-top:3px;color:var(--text);}
+  .result-box.highlight{border-color:var(--blue);background:#EFF4FF;}
+  .result-box.highlight .rvalue{color:var(--blue);}
+
+  .result-box.split{padding:0;display:flex;overflow:hidden;}
+  .result-box.split .split-half{padding:12px 14px;flex:1;min-width:0;}
+  .result-box.split .split-half:last-child{flex:1.3;}
+  .result-box.split .split-half + .split-half{border-left:1.5px solid var(--border);}
+  .result-box.split .manual-input{
+    width:100%;box-sizing:border-box;min-width:70px;margin-top:6px;background:#fff;
+    border:1.5px solid var(--border);border-radius:8px;padding:6px 9px;
+    font-family:'JetBrains Mono',monospace;font-weight:600;font-size:15px;color:var(--text);
+  }
+  .result-box.split .manual-input:focus{outline:none;border-color:var(--blue);}
+  @media (max-width:480px){
+    .result-box.split{flex-wrap:wrap;}
+    .result-box.split .split-half{flex:1 1 100%;}
+    .result-box.split .split-half + .split-half{border-left:none;border-top:1.5px solid var(--border);}
+  }
+  .calc-foot{display:flex;justify-content:space-between;align-items:center;margin-top:16px;flex-wrap:wrap;gap:10px;}
+  .save-msg{font-size:12px;color:var(--teal);font-weight:600;font-family:'JetBrains Mono',monospace;opacity:0;transition:.2s opacity;}
+  .save-msg.show{opacity:1;}
+
+  .hero-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px;}
+  @media (max-width:760px){.hero-cards{grid-template-columns:1fr;}}
+
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#D5D9E2;border-radius:4px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <p class="brand-eyebrow">AssetTracker · Fleet Fuel Log</p>
+      <h1>Fuel &amp; Mileage <span>Dashboard</span></h1>
+    </div>
+    <div>
+      <div class="upload-group">
+        <label class="upload-btn" for="fuelInput" id="fuelBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0-12l-4 4m4-4l4 4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+          Upload Fuel Log
+        </label>
+        <label class="upload-btn" for="assetInput" id="assetBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4-9-4zm0 5l9 4 9-4M3 7v10l9 4 9-4V7"/></svg>
+          Upload Vehicle &amp; Tank Capacity
+        </label>
+        <label class="upload-btn" for="beforeRefillInput" id="beforeRefillBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0-12l-4 4m4-4l4 4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+          Upload Before Refill
+        </label>
+        <button class="btn danger" id="clearAllBtn" onclick="clearAllData()" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6h16z"/></svg>
+          Clear All Data
+        </button>
+      </div>
+      <input type="file" id="fuelInput" accept=".xlsx,.xls,.csv">
+      <input type="file" id="assetInput" accept=".xlsx,.xls,.csv">
+      <input type="file" id="beforeRefillInput" accept=".xlsx,.xls,.csv">
+      <div class="status-row">
+        <p class="data-status" id="fuelStatus">Fuel log: showing demo data</p>
+        <p class="data-status" id="assetStatus">Tank capacity: showing demo data</p>
+        <p class="data-status" id="beforeRefillStatus">Before Refill: no file uploaded yet</p>
+      </div>
+    </div>
+  </header>
+
+  <div class="page-nav">
+    <button class="page-nav-btn active" id="navDashboard" onclick="switchPage('dashboard')">Dashboard</button>
+    <button class="page-nav-btn" id="navReports" onclick="switchPage('reports')">Mileage Reports</button>
+  </div>
+
+  <!-- ===== PAGE 1: Dashboard ===== -->
+  <div class="page-view active" id="pageDashboard">
+    <div class="grid">
+      <div class="panel">
+        <p class="panel-title">Vehicles</p>
+        <input type="text" class="search-box" id="searchBox" placeholder="Search vehicle number…">
+        <div class="vehicle-list" id="vehicleList"></div>
+      </div>
+
+      <div class="panel" id="detailsPanel">
+        <div class="details-empty" id="detailsEmpty">
+          <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+          <div class="big">Select a vehicle</div>
+          <div>Upload your fuel log excel, pick a vehicle, and its tank capacity, fuel history, and mileage calculator will show up here automatically</div>
+        </div>
+        <div id="detailsContent" style="display:none;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== PAGE 2: Mileage Reports (fleet-wide) ===== -->
+  <div class="page-view" id="pageReports">
+    <div class="panel">
+      <div class="panel-head-row">
+        <p class="panel-title">Best Mileage — Fleet</p>
+      </div>
+      <div class="hero-cards" id="heroCards"></div>
+    </div>
+    <div class="panel" style="margin-top:20px;">
+      <div class="panel-head-row">
+        <p class="panel-title">All Saved Mileage Reports</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn mini" id="exportBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
+            Export Excel
+          </button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <div class="table-scroll">
+          <table id="reportsTable">
+            <thead><tr>
+              <th></th><th>Saved On</th><th>Vehicle</th><th>Start Date</th><th>End Date</th>
+              <th>Start Odo</th><th>End Odo</th><th>Distance (KM)</th><th>Total Fuel Refill (Ltr)</th><th>Consumption (Ltr)</th><th>Mileage (KM/L)</th><th></th>
+            </tr></thead>
+            <tbody id="reportsTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ---------- Demo data ----------
+   Matches the real fuel-log export columns: Vehicle | Date | Before Ltr
+   "Before Ltr" = fuel level reading in the tank AT the payment/refill event
+   (the level the sensor/pump saw before that top-up was pumped in). Rows are
+   NOT already "amount refilled" — the amount refilled and the fuel-full/partial
+   status are both derived from this reading + the vehicle's tank capacity. */
+const DEMO_FUEL = [
+  {vehicle:"TN 52 AE 8155", date:"01/07/2026 08:10 AM", beforeLtr:12.50},
+  {vehicle:"TN 52 AE 8155", date:"03/07/2026 10:52 PM", beforeLtr:18.40},
+  {vehicle:"TN 52 AE 8155", date:"10/07/2026 07:41 PM", beforeLtr:9.55},
+  {vehicle:"TN 52 AE 8155", date:"12/07/2026 09:08 PM", beforeLtr:22.30},
+  {vehicle:"TN 52 AE 8155", date:"18/07/2026 02:05 AM", beforeLtr:4.75},
+
+  {vehicle:"TN 52 AH 0266", date:"02/07/2026 07:28 AM", beforeLtr:15.20},
+  {vehicle:"TN 52 AH 0266", date:"08/07/2026 10:49 PM", beforeLtr:11.05},
+  {vehicle:"TN 52 AH 0266", date:"09/07/2026 10:24 AM", beforeLtr:117.50},
+  {vehicle:"TN 52 AH 0266", date:"15/07/2026 11:05 AM", beforeLtr:20.60},
+
+  {vehicle:"TN 52 AE 9677", date:"14/07/2026 10:20 PM", beforeLtr:8.90},
+  {vehicle:"TN 52 AE 9677", date:"17/07/2026 09:32 AM", beforeLtr:96.80},
+];
+const DEMO_ASSETS = [
+  {vehicle:"TN 52 AE 8155", capacityLtr:150},
+  {vehicle:"TN 52 AH 0266", capacityLtr:120},
+  {vehicle:"TN 52 AE 9677", capacityLtr:100},
+];
+
+let fuelData = DEMO_FUEL.slice();
+let assetData = DEMO_ASSETS.slice();
+let beforeRefillData = [];   // {vehicle, date, beforeLtr} — uploaded separately via "Upload Before Refill"
+let activeVehicle = null;
+let mileageReports = [];   // {id, vehicle, startDate, endDate, startOdo, endOdo, distance, fuelLtr, entriesCount, mileage, createdAt}
+
+// Every fuel-log / before-refill row gets a stable unique id so a single row
+// can be edited in place later, without disturbing the rest of the dataset.
+function ensureIds(arr){
+  (arr||[]).forEach((r,i)=>{ if(!r.id) r.id = `row_${Date.now()}_${i}_${Math.random().toString(36).slice(2,8)}`; });
+  return arr;
+}
+ensureIds(fuelData);
+
+const LS_REPORTS = 'assettracker_mileage_reports_v2';
+const LS_FUEL = 'assettracker_fuel_data_v1';
+const LS_ASSET = 'assettracker_asset_data_v1';
+const LS_BEFORE_REFILL = 'assettracker_before_refill_data_v1';
+
+function saveReportsLS(){ try{ localStorage.setItem(LS_REPORTS, JSON.stringify(mileageReports)); }catch(e){console.error(e);} }
+function loadReportsLS(){ try{ const raw = localStorage.getItem(LS_REPORTS); mileageReports = raw ? JSON.parse(raw) : []; }catch(e){ mileageReports = []; } }
+
+function saveFuelLS(){ try{ localStorage.setItem(LS_FUEL, JSON.stringify(fuelData)); }catch(e){console.error(e);} }
+function saveAssetLS(){ try{ localStorage.setItem(LS_ASSET, JSON.stringify(assetData)); }catch(e){console.error(e);} }
+function saveBeforeRefillLS(){ try{ localStorage.setItem(LS_BEFORE_REFILL, JSON.stringify(beforeRefillData)); }catch(e){console.error(e);} }
+function loadUploadsLS(){
+  try{
+    const rawFuel = localStorage.getItem(LS_FUEL);
+    if(rawFuel){
+      const parsed = JSON.parse(rawFuel);
+      if(Array.isArray(parsed) && parsed.length){
+        fuelData = ensureIds(parsed);
+        document.getElementById('fuelStatus').textContent = `Fuel log: ${parsed.length} records (restored from this browser)`;
+        document.getElementById('fuelStatus').className = 'data-status live';
+        document.getElementById('fuelBtn').classList.add('uploaded');
+      }
+    }
+  }catch(e){ console.error(e); }
+  try{
+    const rawAsset = localStorage.getItem(LS_ASSET);
+    if(rawAsset){
+      const parsed = JSON.parse(rawAsset);
+      if(Array.isArray(parsed) && parsed.length){
+        assetData = parsed;
+        document.getElementById('assetStatus').textContent = `Tank capacity: ${parsed.length} vehicles (restored from this browser)`;
+        document.getElementById('assetStatus').className = 'data-status live';
+        document.getElementById('assetBtn').classList.add('uploaded');
+      }
+    }
+  }catch(e){ console.error(e); }
+  try{
+    const rawBefore = localStorage.getItem(LS_BEFORE_REFILL);
+    if(rawBefore){
+      const parsed = JSON.parse(rawBefore);
+      if(Array.isArray(parsed) && parsed.length){
+        beforeRefillData = ensureIds(parsed);
+        document.getElementById('beforeRefillStatus').textContent = `Before Refill: ${parsed.length} records (restored from this browser)`;
+        document.getElementById('beforeRefillStatus').className = 'data-status live';
+        document.getElementById('beforeRefillBtn').classList.add('uploaded');
+      }
+    }
+  }catch(e){ console.error(e); }
+}
+
+/* ---------- Clear all data ---------- */
+function clearAllData(){
+  const ok = confirm('This will clear ALL uploaded data (Fuel Log, Tank Capacity, Before Refill) and all saved Mileage Reports from this browser. This cannot be undone. Continue?');
+  if(!ok) return;
+
+  fuelData = [];
+  assetData = [];
+  beforeRefillData = [];
+  mileageReports = [];
+  activeVehicle = null;
+
+  try{
+    localStorage.removeItem(LS_FUEL);
+    localStorage.removeItem(LS_ASSET);
+    localStorage.removeItem(LS_BEFORE_REFILL);
+    localStorage.removeItem(LS_REPORTS);
+  }catch(e){ console.error(e); }
+
+  const fuelStatus = document.getElementById('fuelStatus');
+  fuelStatus.textContent = 'Fuel log: no file uploaded yet';
+  fuelStatus.className = 'data-status';
+  document.getElementById('fuelBtn').classList.remove('uploaded');
+
+  const assetStatus = document.getElementById('assetStatus');
+  assetStatus.textContent = 'Tank capacity: no file uploaded yet';
+  assetStatus.className = 'data-status';
+  document.getElementById('assetBtn').classList.remove('uploaded');
+
+  const beforeRefillStatus = document.getElementById('beforeRefillStatus');
+  beforeRefillStatus.textContent = 'Before Refill: no file uploaded yet';
+  beforeRefillStatus.className = 'data-status';
+  document.getElementById('beforeRefillBtn').classList.remove('uploaded');
+
+  document.getElementById('detailsContent').style.display = 'none';
+  document.getElementById('detailsEmpty').style.display = 'flex';
+  document.getElementById('searchBox').value = '';
+  renderVehicleList();
+  if(document.getElementById('pageReports').classList.contains('active')) renderReportsPage();
+}
+
+/* ---------- Page navigation ---------- */
+function switchPage(page){
+  document.getElementById('pageDashboard').classList.toggle('active', page==='dashboard');
+  document.getElementById('pageReports').classList.toggle('active', page==='reports');
+  document.getElementById('navDashboard').classList.toggle('active', page==='dashboard');
+  document.getElementById('navReports').classList.toggle('active', page==='reports');
+  if(page==='reports') renderReportsPage();
+}
+
+/* ---------- Helpers ---------- */
+function normalize(v){ return String(v||'').replace(/\s+/g,' ').trim().toUpperCase(); }
+function parseLogDate(str){
+  if(str===null || str===undefined || str==='') return null;
+  // Normalize: strip non-breaking spaces / stray unicode spacing, collapse whitespace
+  let s = String(str).replace(/\u00A0/g,' ').trim().replace(/\s+/g,' ');
+  if(s==='') return null;
+
+  // Pure number => a raw Excel date serial slipped through instead of a
+  // formatted string for this one row (happens when a cell's format code
+  // differs from the rest of the column). Convert it properly.
+  if(/^\d+(\.\d+)?$/.test(s)){
+    const serial = parseFloat(s);
+    if(serial > 20000 && serial < 100000){
+      const utcDays = Math.floor(serial - 25569);
+      const base = new Date(utcDays * 86400 * 1000);
+      const fractionalDay = serial - Math.floor(serial);
+      const totalSecs = Math.round(86400 * fractionalDay);
+      const hh = Math.floor(totalSecs/3600), min = Math.floor((totalSecs%3600)/60), sec = totalSecs%60;
+      const d = new Date(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), hh, min, sec);
+      if(!isNaN(d)) return d;
+    }
+  }
+
+  // DD/MM/YYYY HH:MM[:SS] AM/PM (12-hour) — primary export format. Accepts
+  // "AM"/"PM" or "a.m."/"p.m." and a comma before the time.
+  let m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp]\.?[Mm]\.?)?$/);
+  if(m){
+    let [_, dd, mm, yyyy, hh, min, sec, ap] = m;
+    dd=+dd; mm=+mm; yyyy=+yyyy; hh=parseInt(hh,10); min=+min; sec=sec?+sec:0;
+    if(yyyy < 100) yyyy += 2000;
+    if(ap){
+      ap = ap.replace(/\./g,'').toUpperCase();
+      if(ap==='PM' && hh!==12) hh+=12;
+      if(ap==='AM' && hh===12) hh=0;
+    }
+    // Guard against impossible day/month combos (e.g. a stray MM/DD row) —
+    // if the "month" is >12 but the "day" is <=12, the two are swapped.
+    if(mm>12 && dd<=12){ [dd,mm]=[mm,dd]; }
+    const d = new Date(yyyy, mm-1, dd, hh, min, sec);
+    if(!isNaN(d)) return d;
+  }
+
+  // YYYY-MM-DD[ T]HH:MM[:SS] (ISO-style, usually 24-hour but AM/PM tolerated)
+  m = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp]\.?[Mm]\.?)?$/);
+  if(m){
+    let [_, yyyy, mm, dd, hh, min, sec, ap] = m;
+    yyyy=+yyyy; mm=+mm; dd=+dd; hh=parseInt(hh,10); min=+min; sec=sec?+sec:0;
+    if(ap){
+      ap = ap.replace(/\./g,'').toUpperCase();
+      if(ap==='PM' && hh!==12) hh+=12;
+      if(ap==='AM' && hh===12) hh=0;
+    }
+    const d = new Date(yyyy, mm-1, dd, hh, min, sec);
+    if(!isNaN(d)) return d;
+  }
+
+  // Date-only fallback: DD/MM/YYYY
+  m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+  if(m){
+    let [_, dd, mm, yyyy] = m;
+    dd=+dd; mm=+mm; yyyy=+yyyy;
+    if(yyyy < 100) yyyy += 2000;
+    if(mm>12 && dd<=12){ [dd,mm]=[mm,dd]; }
+    const d = new Date(yyyy, mm-1, dd);
+    if(!isNaN(d)) return d;
+  }
+
+  // Date-only YYYY-MM-DD
+  m = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if(m){
+    const d = new Date(+m[1], +m[2]-1, +m[3]);
+    if(!isNaN(d)) return d;
+  }
+
+  // Last resort — let the browser try (handles anything unusual, e.g. locale
+  // strings not covered above)
+  const fallback = new Date(s);
+  return isNaN(fallback) ? null : fallback;
+}
+function fmtDateForStorage(d){
+  // Round-trips back into the same DD/MM/YYYY hh:mm AM/PM text the app reads,
+  // so an edited row parses identically to an uploaded one.
+  const p = n => String(n).padStart(2,'0');
+  let hh = d.getHours();
+  const ap = hh >= 12 ? 'PM' : 'AM';
+  hh = hh % 12; if(hh === 0) hh = 12;
+  return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(hh)}:${p(d.getMinutes())} ${ap}`;
+}
+function fmtDate(d){
+  if(!d) return "—";
+  return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) + ' · ' +
+         d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true});
+}
+function toInputValue(d){
+  if(!d) return '';
+  const p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function levelColor(value, scaleMax){
+  const pct = value/scaleMax;
+  if(pct <= 0.25) return '#E11D48';
+  if(pct <= 0.55) return '#D97706';
+  return '#0E9F6E';
+}
+function levelTag(value, scaleMax){
+  const pct = value/scaleMax;
+  if(pct <= 0.25) return '<span class="refill-tag tag-low">Refill urgently</span>';
+  if(pct <= 0.55) return '<span class="refill-tag tag-mid">Plan a refill</span>';
+  return '<span class="refill-tag tag-ok">Comfortable</span>';
+}
+function findAsset(vehicle){
+  const key = normalize(vehicle);
+  return assetData.find(a => normalize(a.vehicle) === key);
+}
+function vehicleFuelRecords(vehicle){
+  const key = normalize(vehicle);
+  const records = fuelData.filter(r=>normalize(r.vehicle)===key)
+    .map(r=>({...r, dateObj: parseLogDate(r.date)}))
+    .filter(r=>r.dateObj!==null); // keep every row with a valid date — never drop rows silently elsewhere
+  records.sort((a,b)=>a.dateObj-b.dateObj);
+  return records;
+}
+function vehicleBeforeRefillRecords(vehicle){
+  const key = normalize(vehicle);
+  const records = beforeRefillData.filter(r=>normalize(r.vehicle)===key)
+    .map(r=>({...r, dateObj: parseLogDate(r.date)}))
+    .filter(r=>r.dateObj!==null);
+  records.sort((a,b)=>a.dateObj-b.dateObj);
+  return records;
+}
+function bestMileageForVehicle(vehicle){
+  const rows = mileageReports.filter(r=>normalize(r.vehicle)===normalize(vehicle));
+  if(rows.length===0) return null;
+  return rows.reduce((best,r)=> (!best || r.mileage>best.mileage) ? r : best, null);
+}
+
+/* ---------- Vehicle list ---------- */
+function getVehicles(){
+  const map = {};
+  fuelData.forEach(r=>{
+    if(!r.vehicle) return;
+    const key = normalize(r.vehicle);
+    if(!map[key]) map[key] = {display:r.vehicle.trim(), count:0, hasAsset:false};
+    map[key].count++;
+  });
+  assetData.forEach(a=>{
+    if(!a.vehicle) return;
+    const key = normalize(a.vehicle);
+    if(!map[key]) map[key] = {display:a.vehicle.trim(), count:0, hasAsset:false};
+    map[key].hasAsset = true;
+  });
+  return Object.values(map).sort((a,b)=> a.display.localeCompare(b.display));
+}
+
+function renderVehicleList(filter=""){
+  const listEl = document.getElementById('vehicleList');
+  const vehicles = getVehicles().filter(v => v.display.toLowerCase().includes(filter.toLowerCase()));
+  if(vehicles.length === 0){
+    listEl.innerHTML = '<div class="empty-list">No vehicles match your search.</div>';
+    return;
+  }
+  listEl.innerHTML = vehicles.map(v=>{
+    const best = bestMileageForVehicle(v.display);
+    return `
+    <div class="vehicle-item ${v.display===activeVehicle?'active':''}" data-vehicle="${v.display}">
+      <div>
+        <div class="plate">${v.display}</div>
+        <div class="count">${v.count} fuel log${v.count===1?'':'s'}</div>
+      </div>
+      <div class="badges">
+        ${v.hasAsset ? '<span class="badge">Tank ✓</span>' : ''}
+        ${best ? `<span class="badge best">🏆 ${best.mileage.toFixed(1)} KM/L</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  listEl.querySelectorAll('.vehicle-item').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      activeVehicle = el.dataset.vehicle;
+      renderVehicleList(document.getElementById('searchBox').value);
+      renderDetails(activeVehicle);
+    });
+  });
+}
+
+/* ---------- Fuel gauge ---------- */
+function gaugeSVG(value, scaleMax, color){
+  const clamped = Math.max(0, Math.min(value, scaleMax));
+  const angle = -90 + (clamped/scaleMax)*180;
+  return `
+  <svg width="200" height="120" viewBox="0 0 200 120">
+    <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#E7E9EE" stroke-width="14" stroke-linecap="round"/>
+    <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="${color}" stroke-width="14" stroke-linecap="round"
+      stroke-dasharray="${(clamped/scaleMax)*251.2} 251.2"/>
+    <g class="needle" style="transform:rotate(${angle}deg)">
+      <line x1="100" y1="100" x2="100" y2="34" stroke="${color}" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="100" cy="100" r="6" fill="${color}"/>
+    </g>
+    <text x="20" y="115" fill="#8A93A6" font-size="9" font-family="JetBrains Mono">E</text>
+    <text x="172" y="115" fill="#8A93A6" font-size="9" font-family="JetBrains Mono">F</text>
+  </svg>`;
+}
+
+/* ---------- Mileage calculator (new concept, replaces old manual entry module) ---------- */
+function renderCalcPanel(vehicle){
+  const records = vehicleFuelRecords(vehicle);
+  if(records.length < 2){
+    return `<div class="calc-panel">
+      <p class="panel-title">Calculate Consumption / Mileage</p>
+      <div class="no-log">Need at least 2 fuel log readings for this vehicle to calculate consumption over a date range.</div>
+    </div>`;
+  }
+  const minDT = toInputValue(records[0].dateObj);
+  const maxDT = toInputValue(records[records.length-1].dateObj);
+  return `
+  <div class="calc-panel" id="calcPanel">
+    <p class="panel-title">Calculate Consumption / Mileage — Date Range Filter</p>
+    <div class="calc-grid">
+      <div class="field">
+        <label>From Date &amp; Time</label>
+        <input type="datetime-local" id="calcStart" value="${minDT}" min="${minDT}" max="${maxDT}" onchange="recalcCalculator()">
+      </div>
+      <div class="field">
+        <label>To Date &amp; Time</label>
+        <input type="datetime-local" id="calcEnd" value="${maxDT}" min="${minDT}" max="${maxDT}" onchange="recalcCalculator()">
+      </div>
+      <div class="field">
+        <label>Start Odo (KM) — optional</label>
+        <input type="number" id="calcStartOdo" placeholder="Type start odometer" oninput="recalcCalculator()">
+      </div>
+      <div class="field">
+        <label>End Odo (KM) — optional</label>
+        <input type="number" id="calcEndOdo" placeholder="Type end odometer" oninput="recalcCalculator()">
+      </div>
+    </div>
+    <p class="field-note" id="calcNote"></p>
+    <div class="calc-divider"></div>
+    <div class="calc-results">
+      <div class="result-box"><div class="rlabel">Entries in Range</div><div class="rvalue" id="res_entries">—</div></div>
+      <div class="result-box highlight split">
+        <div class="split-half">
+          <div class="rlabel">Total Fuel Refill (Ltr)</div>
+          <div class="rvalue" id="res_fuel">—</div>
+        </div>
+        <div class="split-half">
+          <div class="rlabel">Manual Entry</div>
+          <input type="number" class="manual-input" id="manualFuelEntry" placeholder="0" value="0" oninput="recalcCalculator()">
+        </div>
+      </div>
+      <div class="result-box highlight"><div class="rlabel">Consumption (Ltr)</div><div class="rvalue" id="res_consumption">—</div></div>
+      <div class="result-box"><div class="rlabel">Distance (KM)</div><div class="rvalue" id="res_distance">—</div></div>
+      <div class="result-box highlight"><div class="rlabel">Mileage (KM/L)</div><div class="rvalue" id="res_mileage">—</div></div>
+    </div>
+    <div class="calc-divider"></div>
+    <p class="panel-title">Matched Log Entries (proof — every row counted is listed here)</p>
+    <div class="table-wrap"><div class="table-scroll">
+      <table><thead><tr><th>#</th><th>Payment Date</th><th>Fuel Refill</th><th>Before Fuel Ltr</th><th>Total Fuel (Before + Fuel)</th><th>Status</th></tr></thead>
+      <tbody id="calcMatchedRows"></tbody></table>
+    </div></div>
+    <div class="calc-foot">
+      <span class="save-msg" id="calcSaveMsg">✓ Saved to Mileage Reports</span>
+      <button class="btn primary" id="calcSaveBtn" onclick="saveMileageCalc('${vehicle}')" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+        Save Mileage Report
+      </button>
+    </div>
+  </div>`;
+}
+
+function getCalcRange(){
+  const records = vehicleFuelRecords(activeVehicle);
+  const startEl = document.getElementById('calcStart');
+  const endEl = document.getElementById('calcEnd');
+  if(!startEl || !endEl) return {range:[], records, startDT:null, endDT:null};
+  let startDT = new Date(startEl.value);
+  let endDT = new Date(endEl.value);
+  if(isNaN(startDT) || isNaN(endDT)) return {range:[], records, startDT:null, endDT:null};
+  if(startDT > endDT){ [startDT, endDT] = [endDT, startDT]; }
+  // Inclusive on both ends — a reading exactly at the boundary must count.
+  const range = records.filter(r => r.dateObj >= startDT && r.dateObj <= endDT);
+  return {range, records, startDT, endDT};
+}
+
+// Groups a vehicle's Before Refill records by calendar day, keeping each
+// day's entries in the exact order they appear in the uploaded Excel file
+// (their row order), not sorted by the time-of-day parsed out of the date.
+// This is what lets same-day duplicates line up 1st-with-1st, 2nd-with-2nd.
+function groupBeforeRefillByDay(brRecords){
+  const groups = {};
+  brRecords
+    .slice()
+    .sort((a,b)=>(a.orderIdx ?? 0) - (b.orderIdx ?? 0))
+    .forEach(b=>{
+      if(!b.dateObj) return;
+      const key = `${b.dateObj.getFullYear()}-${b.dateObj.getMonth()}-${b.dateObj.getDate()}`;
+      (groups[key] = groups[key] || []).push(b);
+    });
+  return groups;
+}
+
+// Fallback for a Payment Date whose calendar day has no Before Refill entry
+// at all (or has run out of same-day entries) — picks whichever Before
+// Refill reading for this vehicle is closest in time to the payment.
+function nearestBeforeRefillMatch(dateObj, brRecords){
+  let best = null, bestDiff = Infinity;
+  for(const b of brRecords){
+    if(!b.dateObj) continue;
+    const diff = Math.abs(b.dateObj.getTime() - dateObj.getTime());
+    if(diff < bestDiff){ bestDiff = diff; best = b; }
+  }
+  return best;
+}
+
+// Computes the two headline numbers for a matched range, EXCLUDING the first
+// row (it's just the starting baseline reading, not fuel added in this period).
+// Fuel Ltr per row comes from the separately uploaded "Before Refill" file:
+//   - Same calendar day as the payment -> matched IN FILE ORDER. If a day has
+//     two Before Refill rows and two payments, payment #1 gets Before Refill
+//     row #1 (as it appears in the Excel file), payment #2 gets row #2, etc.
+//   - No Before Refill entry left for that day -> falls back to the closest
+//     reading in time for this vehicle, flagged as "Nearest match".
+// A row counts as "Tank Full" when its Total Fuel (Before + Fuel) lands on or
+// very close to the vehicle's Tank Capacity — either an exact match or the
+// nearest reading to it, within a small tolerance (5% of capacity, min 5 L).
+function isTankFullReading(totalFuel, capacity){
+  if(capacity === null || capacity === undefined || !(capacity > 0) || totalFuel === null) return false;
+  const tolerance = Math.max(capacity * 0.05, 5);
+  return Math.abs(totalFuel - capacity) <= tolerance;
+}
+
+function computeRangeTotals(range, vehicle){
+  if(range.length === 0) return {fuelLtr:0, consumption:0, rowsMeta:[]};
+  const brRecords = vehicleBeforeRefillRecords(vehicle);
+  const dayGroups = groupBeforeRefillByDay(brRecords);
+  const dayCounters = {};
+  const asset = findAsset(vehicle);
+  const capacity = asset ? asset.capacityLtr : null;
+
+  const rowsMeta = range.map((r,i)=>{
+    const dayKey = `${r.dateObj.getFullYear()}-${r.dateObj.getMonth()}-${r.dateObj.getDate()}`;
+    const occurrence = (dayCounters[dayKey] = (dayCounters[dayKey] || 0) + 1); // 1-based
+    const group = dayGroups[dayKey];
+
+    let fuelAdded = null, status = 'No match';
+    if(group && group.length >= occurrence){
+      fuelAdded = group[occurrence - 1].beforeLtr;
+      status = 'Refilled';
+    } else {
+      const nearest = nearestBeforeRefillMatch(r.dateObj, brRecords);
+      if(nearest){ fuelAdded = nearest.beforeLtr; status = 'Nearest match'; }
+    }
+
+    // No "Before Refill" file uploaded (or nothing at all for this vehicle) —
+    // instead of leaving the row blank, fall back to the base Excel reading
+    // (the Fuel Refill value from the main Fuel Log) so the table still shows data.
+    let usedBaseFallback = false;
+    if(fuelAdded === null){
+      fuelAdded = 0;
+      usedBaseFallback = true;
+      status = 'No Before Refill data';
+    }
+
+    const totalFuel = usedBaseFallback ? r.beforeLtr : r.beforeLtr + fuelAdded;
+    // Tank Capacity vs Total Fuel (Before + Fuel): same or nearest value -> Tank Full,
+    // overriding whatever match status was found above.
+    if(isTankFullReading(totalFuel, capacity)){
+      status = 'Tank Full';
+    }
+    const diff = i===0 ? null : (r.beforeLtr - range[i-1].beforeLtr);
+    return {...r, fuelAdded, totalFuel, status, diff, isFirst: i===0, usedBaseFallback};
+  });
+  // Total Fuel Refill (Ltr) sums the "Fuel Refill" column (r.beforeLtr), skipping
+  // row #1 which is only the starting baseline reading, not fuel added.
+  const fuelLtr = rowsMeta.slice(1).reduce((s,r)=>s+(r.beforeLtr||0), 0);
+  const consumption = rowsMeta.slice(1).reduce((s,r)=>s+Math.abs(r.diff), 0);
+  return {fuelLtr, consumption, rowsMeta};
+}
+
+function recalcCalculator(){
+  const {range, startDT, endDT} = getCalcRange();
+  const noteEl = document.getElementById('calcNote');
+  if(!noteEl) return;
+
+  const {fuelLtr, consumption, rowsMeta} = computeRangeTotals(range, activeVehicle);
+  const entriesCount = range.length;
+
+  const startOdo = parseFloat(document.getElementById('calcStartOdo').value);
+  const endOdo = parseFloat(document.getElementById('calcEndOdo').value);
+  const hasOdo = !isNaN(startOdo) && !isNaN(endOdo);
+  const distance = hasOdo ? Math.max(endOdo - startOdo, 0) : null;
+
+  const manualEntryEl = document.getElementById('manualFuelEntry');
+  const manualFuel = manualEntryEl ? (parseFloat(manualEntryEl.value) || 0) : 0;
+  const totalFuelRefill = fuelLtr + manualFuel;
+
+  // Mileage (KM/L) = Distance (KM) ÷ Total Fuel Refill (Ltr) — uses the Total Fuel
+  // Refill figure (fuel log total + any Manual Entry), not the Consumption figure.
+  const mileage = (hasOdo && totalFuelRefill>0) ? distance/totalFuelRefill : null;
+
+  document.getElementById('res_entries').textContent = entriesCount;
+  document.getElementById('res_fuel').textContent = totalFuelRefill.toFixed(2) + ' L';
+  document.getElementById('res_consumption').textContent = consumption.toFixed(2) + ' L';
+  document.getElementById('res_distance').textContent = distance!==null ? distance.toFixed(1) : '—';
+  document.getElementById('res_mileage').textContent = mileage!==null ? mileage.toFixed(2) : '—';
+
+  document.getElementById('calcMatchedRows').innerHTML = entriesCount
+    ? rowsMeta.map((r,i)=>{
+        const fuelCell = r.usedBaseFallback
+          ? (r.isFirst ? '0.00 L (baseline, no file)' : '0.00 L (no file)')
+          : (r.isFirst ? r.fuelAdded.toFixed(2)+' L (baseline)' : r.fuelAdded.toFixed(2)+' L');
+        const totalCell = r.totalFuel===null ? '—' : r.totalFuel.toFixed(2)+' L';
+        const statusCell = r.status==='Tank Full' ? '<span class="refill-tag tag-full">Tank Full</span>'
+          : r.status==='Refilled' ? '<span class="refill-tag tag-ok">Refilled</span>'
+          : r.status==='Nearest match' ? '<span class="refill-tag tag-mid">Nearest match</span>'
+          : r.status==='No Before Refill data' ? '<span class="refill-tag tag-low">No Before Refill file</span>'
+          : '<span class="refill-tag tag-low">No match</span>';
+        return `<tr>
+        <td>${i+1}</td>
+        <td>${fmtDate(r.dateObj)}</td>
+        <td class="val">${r.beforeLtr.toFixed(2)} L</td>
+        <td class="val">${fuelCell}</td>
+        <td class="val">${totalCell}</td>
+        <td>${statusCell}</td>
+      </tr>`;
+      }).join('')
+    : `<tr><td colspan="6" style="text-align:center;color:var(--muted);">No fuel log entries fall inside this date/time range.</td></tr>`;
+
+  let note = '';
+  if(hasOdo && endOdo < startOdo) note = '⚠ End Odo is lower than Start Odo — check the readings.';
+  noteEl.textContent = note;
+  noteEl.className = (hasOdo && endOdo < startOdo) ? 'field-note warn' : 'field-note';
+
+  const saveBtn = document.getElementById('calcSaveBtn');
+  saveBtn.disabled = !(entriesCount>1 && (fuelLtr>0 || consumption>0));
+  document.getElementById('calcSaveMsg').classList.remove('show');
+}
+
+function saveMileageCalc(vehicle){
+  const {range, startDT, endDT} = getCalcRange();
+  const {fuelLtr, consumption} = computeRangeTotals(range, vehicle);
+  const startOdo = parseFloat(document.getElementById('calcStartOdo').value) || 0;
+  const endOdo = parseFloat(document.getElementById('calcEndOdo').value) || 0;
+  const distance = +Math.max(endOdo - startOdo, 0).toFixed(1);
+
+  const manualEntryEl = document.getElementById('manualFuelEntry');
+  const manualFuel = manualEntryEl ? (parseFloat(manualEntryEl.value) || 0) : 0;
+  const totalFuelRefill = fuelLtr + manualFuel;
+
+  // Mileage (KM/L) = Distance (KM) ÷ Total Fuel Refill (Ltr)
+  const mileage = (distance>0 && totalFuelRefill>0) ? +(distance/totalFuelRefill).toFixed(2) : 0;
+
+  mileageReports.push({
+    id: Date.now(),
+    vehicle,
+    startDate: fmtDate(startDT),
+    endDate: fmtDate(endDT),
+    startOdo, endOdo, distance,
+    fuelLtr: +totalFuelRefill.toFixed(2),
+    consumption: +consumption.toFixed(2),
+    entriesCount: range.length, mileage,
+    createdAt: fmtDate(new Date())
+  });
+  saveReportsLS();
+  document.getElementById('calcSaveMsg').classList.add('show');
+  renderVehicleList(document.getElementById('searchBox').value);
+}
+
+function deleteMileageReport(id){
+  mileageReports = mileageReports.filter(r=>r.id!==id);
+  saveReportsLS();
+  renderVehicleList(document.getElementById('searchBox').value);
+  if(activeVehicle) renderMileageHistory(activeVehicle);
+  renderReportsPage();
+}
+
+function renderMileageHistory(vehicle){
+  const el = document.getElementById('mileageHistoryBlock');
+  if(!el) return;
+  const rows = mileageReports.filter(r=>normalize(r.vehicle)===normalize(vehicle)).sort((a,b)=>b.id-a.id);
+  if(rows.length===0){
+    el.innerHTML = '<div class="no-log">No saved mileage reports yet for this vehicle — use the calculator above.</div>';
+    return;
+  }
+  const bestId = rows.reduce((b,r)=> (!b || r.mileage>b.mileage) ? r : b, null).id;
+  el.innerHTML = `
+    <div class="table-wrap">
+      <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th></th><th>Start Date</th><th>End Date</th><th>Start Odo</th><th>End Odo</th>
+            <th>Distance (KM)</th><th>Total Fuel Refill (Ltr)</th><th>Consumption (Ltr)</th><th>Mileage (KM/L)</th><th></th>
+          </tr></thead>
+          <tbody>
+            ${rows.map(r=>`
+              <tr class="${r.id===bestId?'row-best':''}">
+                <td>${r.id===bestId?'<span class="star-tag">🏆 Best</span>':''}</td>
+                <td>${r.startDate}</td>
+                <td>${r.endDate}</td>
+                <td class="val">${r.startOdo}</td>
+                <td class="val">${r.endOdo}</td>
+                <td class="val">${r.distance.toFixed(1)}</td>
+                <td class="val">${r.fuelLtr.toFixed(2)} L</td>
+                <td class="val">${r.fuelLtr.toFixed(2)} L</td>
+                <td class="val">${r.mileage.toFixed(2)}</td>
+                <td><button class="btn mini danger" onclick="deleteMileageReport(${r.id})">Delete</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+/* ---------- Details panel ---------- */
+function renderDetails(vehicle){
+  document.getElementById('detailsEmpty').style.display = 'none';
+  const content = document.getElementById('detailsContent');
+  content.style.display = 'block';
+
+  const records = vehicleFuelRecords(vehicle);
+  const asset = findAsset(vehicle);
+  const capacity = asset ? asset.capacityLtr : null;
+  const best = bestMileageForVehicle(vehicle);
+
+  const values = records.map(r=>r.beforeLtr);
+  const maxObserved = values.length ? Math.max(...values) : 0;
+  const scaleMax = capacity && capacity > 0 ? capacity : Math.max(50, Math.ceil((maxObserved*1.15)/25)*25);
+
+  let gaugeBlock = '';
+
+  if(records.length){
+    const latest = records[records.length-1];
+    const latestColor = levelColor(latest.beforeLtr, scaleMax);
+
+    gaugeBlock = `
+      <div class="gauge-wrap">
+        ${gaugeSVG(latest.beforeLtr, scaleMax, latestColor)}
+        <div class="gauge-reading" style="color:${latestColor}">${latest.beforeLtr.toFixed(2)} L</div>
+        <div class="gauge-label">Fuel Remaining Now</div>
+      </div>`;
+  }
+
+  content.innerHTML = `
+    <div class="vehicle-header">
+      <div>
+        <div class="plate-big">${vehicle}</div>
+        <div class="meta">${records.length} log entries${records.length ? ' · latest ' + fmtDate(records[records.length-1].dateObj) : ''}</div>
+        <div class="tank-chip ${capacity ? '' : 'none'}">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="15" height="12" rx="2"/><path d="M18 10h1a2 2 0 012 2v3a2 2 0 01-2 2h-1"/></svg>
+          Tank Capacity: ${capacity ? capacity + ' Ltr' : 'not available'}
+        </div>
+        ${best ? `<div class="best-chip">🏆 Best Mileage: ${best.mileage.toFixed(2)} KM/L</div>` : ''}
+      </div>
+      ${gaugeBlock}
+    </div>
+    ${renderCalcPanel(vehicle)}
+    <p class="panel-title">Mileage History — This Vehicle</p>
+    <div id="mileageHistoryBlock"></div>
+  `;
+  recalcCalculator();
+  renderMileageHistory(vehicle);
+}
+
+/* ---------- Fleet-wide Mileage Reports page ---------- */
+function renderReportsPage(){
+  const heroEl = document.getElementById('heroCards');
+  const byVehicle = {};
+  mileageReports.forEach(r=>{
+    const key = normalize(r.vehicle);
+    if(!byVehicle[key] || r.mileage > byVehicle[key].mileage) byVehicle[key] = r;
+  });
+  const top3 = Object.values(byVehicle).sort((a,b)=>b.mileage-a.mileage).slice(0,3);
+  if(top3.length===0){
+    heroEl.innerHTML = '<div class="no-log">No mileage reports saved yet. Select a vehicle, run the calculator, and save a report.</div>';
+  } else {
+    heroEl.innerHTML = top3.map((r,i)=>`
+      <div class="refill-card rank-${i+1}">
+        <div class="refill-eyebrow">#${i+1} Best Mileage</div>
+        <div class="refill-value">${r.mileage.toFixed(2)}<small>KM/L</small></div>
+        <div class="refill-date">${r.vehicle}</div>
+        <div class="refill-date">${r.startDate} → ${r.endDate}</div>
+      </div>
+    `).join('');
+  }
+
+  const tbody = document.getElementById('reportsTbody');
+  const rows = mileageReports.slice().sort((a,b)=> b.mileage-a.mileage);
+  if(rows.length===0){
+    tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:24px;">No mileage reports yet.</td></tr>`;
+    return;
+  }
+  const overallBestId = rows[0].id;
+  tbody.innerHTML = rows.map(r=>`
+    <tr class="${r.id===overallBestId?'row-best':''}">
+      <td>${r.id===overallBestId?'<span class="star-tag">🏆</span>':''}</td>
+      <td>${r.createdAt}</td>
+      <td class="val">${r.vehicle}</td>
+      <td>${r.startDate}</td>
+      <td>${r.endDate}</td>
+      <td class="val">${r.startOdo}</td>
+      <td class="val">${r.endOdo}</td>
+      <td class="val">${r.distance.toFixed(1)}</td>
+      <td class="val">${r.fuelLtr.toFixed(2)} L</td>
+      <td class="val">${r.fuelLtr.toFixed(2)} L</td>
+      <td class="val">${r.mileage.toFixed(2)}</td>
+      <td><button class="btn mini danger" onclick="deleteMileageReport(${r.id})">Delete</button></td>
+    </tr>
+  `).join('');
+}
+
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  if(mileageReports.length===0){ alert('No mileage reports to export yet.'); return; }
+  const headers = ['Saved On','Vehicle','Start Date','End Date','Start Odo','End Odo','Distance (KM)','Total Fuel Refill (Ltr)','Consumption (Ltr)','Entries','Mileage (KM/L)'];
+  const rows = mileageReports.slice().sort((a,b)=>b.mileage-a.mileage)
+    .map(r=>[r.createdAt, r.vehicle, r.startDate, r.endDate, r.startOdo, r.endOdo, r.distance, r.fuelLtr, r.fuelLtr, r.entriesCount, r.mileage]);
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Mileage Reports');
+  XLSX.writeFile(wb, 'AssetTracker_Mileage_Reports.xlsx');
+});
+
+/* ---------- File upload: fuel log (new concept — works off whatever excel columns are present) ---------- */
+document.getElementById('fuelInput').addEventListener('change', function(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(evt){
+    try{
+      const wb = XLSX.read(evt.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false});
+      const header = rows[0].map(h => String(h).trim().toLowerCase());
+      const vIdx = header.findIndex(h => h.includes('vehicle'));
+      const dIdx = header.findIndex(h => h.includes('date'));
+      // Prefer an explicit "Before Ltr" column (the real export's format); fall back
+      // to any generic fuel/ltr/remain column for older-style uploads.
+      let bIdx = header.findIndex(h => h.includes('before'));
+      if(bIdx === -1) bIdx = header.findIndex(h => h.includes('fuel') || h.includes('ltr') || h.includes('litre') || h.includes('liter') || h.includes('remain'));
+
+      const parsed = [];
+      let skipped = 0;
+      for(let i=1;i<rows.length;i++){
+        const row = rows[i];
+        if(!row || row.length===0) continue;
+        const vehicle = row[vIdx], date = row[dIdx], beforeLtr = parseFloat(row[bIdx]);
+        if(vehicle && date && !isNaN(beforeLtr)){
+          parsed.push({vehicle:String(vehicle).trim(), date:String(date).trim(), beforeLtr});
+        } else {
+          skipped++;
+        }
+      }
+      if(parsed.length === 0){
+        document.getElementById('fuelStatus').textContent = "Couldn't find Vehicle / Date / Before Ltr columns.";
+        document.getElementById('fuelStatus').className = 'data-status err';
+        return;
+      }
+      fuelData = ensureIds(parsed);
+      saveFuelLS();
+      activeVehicle = null;
+      document.getElementById('detailsContent').style.display = 'none';
+      document.getElementById('detailsEmpty').style.display = 'flex';
+      document.getElementById('fuelStatus').textContent = `Fuel log: ${parsed.length} records from ${file.name}` + (skipped ? ` — ⚠ ${skipped} row(s) skipped (missing Vehicle/Date/Before Ltr)` : '');
+      document.getElementById('fuelStatus').className = 'data-status live';
+      document.getElementById('fuelBtn').classList.add('uploaded');
+      document.getElementById('searchBox').value = '';
+      renderVehicleList();
+    }catch(err){
+      document.getElementById('fuelStatus').textContent = "Couldn't read that file — please upload a valid export.";
+      document.getElementById('fuelStatus').className = 'data-status err';
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+/* ---------- File upload: Before Refill (separate dataset, same Vehicle/Date/Before Ltr format) ---------- */
+document.getElementById('beforeRefillInput').addEventListener('change', function(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(evt){
+    try{
+      const wb = XLSX.read(evt.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false});
+      const header = rows[0].map(h => String(h).trim().toLowerCase());
+      const vIdx = header.findIndex(h => h.includes('vehicle'));
+      const dIdx = header.findIndex(h => h.includes('date'));
+      let bIdx = header.findIndex(h => h.includes('before'));
+      if(bIdx === -1) bIdx = header.findIndex(h => h.includes('fuel') || h.includes('ltr') || h.includes('litre') || h.includes('liter') || h.includes('remain'));
+
+      const parsed = [];
+      for(let i=1;i<rows.length;i++){
+        const row = rows[i];
+        if(!row || row.length===0) continue;
+        const vehicle = row[vIdx], date = row[dIdx], beforeLtr = parseFloat(row[bIdx]);
+        if(vehicle && date && !isNaN(beforeLtr)){
+          parsed.push({vehicle:String(vehicle).trim(), date:String(date).trim(), beforeLtr, orderIdx: parsed.length});
+        }
+      }
+      if(parsed.length === 0){
+        document.getElementById('beforeRefillStatus').textContent = "Couldn't find Vehicle / Date / Before Ltr columns.";
+        document.getElementById('beforeRefillStatus').className = 'data-status err';
+        return;
+      }
+      beforeRefillData = parsed;
+      saveBeforeRefillLS();
+      document.getElementById('beforeRefillStatus').textContent = `Before Refill: ${parsed.length} records from ${file.name}`;
+      document.getElementById('beforeRefillStatus').className = 'data-status live';
+      document.getElementById('beforeRefillBtn').classList.add('uploaded');
+      if(activeVehicle) recalcCalculator();
+    }catch(err){
+      document.getElementById('beforeRefillStatus').textContent = "Couldn't read that file — please upload a valid export.";
+      document.getElementById('beforeRefillStatus').className = 'data-status err';
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+/* ---------- File upload: vehicle & tank capacity ---------- */
+document.getElementById('assetInput').addEventListener('change', function(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(evt){
+    try{
+      const wb = XLSX.read(evt.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false});
+      const header = rows[0].map(h => String(h).trim().toLowerCase());
+      const vIdx = header.findIndex(h => h.includes('asset') || h.includes('vehicle'));
+      const cIdx = header.findIndex(h => h.includes('tank') || h.includes('capacity'));
+
+      const parsed = [];
+      for(let i=1;i<rows.length;i++){
+        const row = rows[i];
+        if(!row || row.length===0) continue;
+        const vehicle = row[vIdx];
+        const capRaw = row[cIdx];
+        const capMatch = String(capRaw||'').match(/[\d.]+/);
+        const capacityLtr = capMatch ? parseFloat(capMatch[0]) : null;
+        if(vehicle){
+          parsed.push({vehicle:String(vehicle).trim(), capacityLtr: capacityLtr && capacityLtr > 0 ? capacityLtr : null});
+        }
+      }
+      if(parsed.length === 0){
+        document.getElementById('assetStatus').textContent = "Couldn't find Asset/Vehicle & Tank Capacity columns.";
+        document.getElementById('assetStatus').className = 'data-status err';
+        return;
+      }
+      assetData = parsed;
+      saveAssetLS();
+      if(activeVehicle) renderDetails(activeVehicle);
+      document.getElementById('assetStatus').textContent = `Tank capacity: ${parsed.length} vehicles from ${file.name}`;
+      document.getElementById('assetStatus').className = 'data-status live';
+      document.getElementById('assetBtn').classList.add('uploaded');
+      renderVehicleList(document.getElementById('searchBox').value);
+    }catch(err){
+      document.getElementById('assetStatus').textContent = "Couldn't read that file — please upload a valid export.";
+      document.getElementById('assetStatus').className = 'data-status err';
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+document.getElementById('searchBox').addEventListener('input', (e)=>{
+  renderVehicleList(e.target.value);
+});
+
+/* ---------- Init ---------- */
+loadReportsLS();
+loadUploadsLS();
+renderVehicleList();
+</script>
+</body>
+</html>
