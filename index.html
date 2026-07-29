@@ -168,6 +168,17 @@
   .hero-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px;}
   @media (max-width:760px){.hero-cards{grid-template-columns:1fr;}}
 
+  /* ===== Date/time field: type-or-pick ===== */
+  .dt-input-wrap{display:flex;align-items:center;gap:6px;position:relative;}
+  .dt-input-wrap .dt-text{flex:1;min-width:0;}
+  .dt-pick-btn{
+    flex:none;background:#fff;border:1.5px solid var(--border);border-radius:9px;
+    width:34px;height:34px;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;color:var(--muted);transition:.15s border-color,.15s color;
+  }
+  .dt-pick-btn:hover{border-color:var(--blue);color:var(--blue);}
+  .dt-hidden-picker{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;left:0;bottom:0;}
+
   ::-webkit-scrollbar{width:8px;height:8px;}
   ::-webkit-scrollbar-thumb{background:#D5D9E2;border-radius:4px;}
 </style>
@@ -624,17 +635,33 @@ function renderCalcPanel(vehicle){
   }
   const minDT = toInputValue(records[0].dateObj);
   const maxDT = toInputValue(records[records.length-1].dateObj);
+  const startText = fmtDateForStorage(records[0].dateObj);
+  const endText = fmtDateForStorage(records[records.length-1].dateObj);
   return `
   <div class="calc-panel" id="calcPanel">
     <p class="panel-title">Calculate Consumption / Mileage — Date Range Filter</p>
     <div class="calc-grid">
       <div class="field">
         <label>From Date &amp; Time</label>
-        <input type="datetime-local" id="calcStart" value="${minDT}" min="${minDT}" max="${maxDT}" onchange="recalcCalculator()">
+        <div class="dt-input-wrap">
+          <input type="text" id="calcStart" class="dt-text" placeholder="DD/MM/YYYY hh:mm AM/PM" value="${startText}"
+            oninput="onCalcDateTextChange()" onchange="onCalcDateTextChange()">
+          <button type="button" class="dt-pick-btn" onclick="openDatePicker('calcStart')" title="Pick date &amp; time">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>
+          </button>
+          <input type="datetime-local" id="calcStartPicker" class="dt-hidden-picker" min="${minDT}" max="${maxDT}" value="${minDT}" onchange="onPickerChange('calcStart')" tabindex="-1">
+        </div>
       </div>
       <div class="field">
         <label>To Date &amp; Time</label>
-        <input type="datetime-local" id="calcEnd" value="${maxDT}" min="${minDT}" max="${maxDT}" onchange="recalcCalculator()">
+        <div class="dt-input-wrap">
+          <input type="text" id="calcEnd" class="dt-text" placeholder="DD/MM/YYYY hh:mm AM/PM" value="${endText}"
+            oninput="onCalcDateTextChange()" onchange="onCalcDateTextChange()">
+          <button type="button" class="dt-pick-btn" onclick="openDatePicker('calcEnd')" title="Pick date &amp; time">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>
+          </button>
+          <input type="datetime-local" id="calcEndPicker" class="dt-hidden-picker" min="${minDT}" max="${maxDT}" value="${maxDT}" onchange="onPickerChange('calcEnd')" tabindex="-1">
+        </div>
       </div>
       <div class="field">
         <label>Start Odo (KM) — optional</label>
@@ -679,14 +706,46 @@ function renderCalcPanel(vehicle){
   </div>`;
 }
 
+/* Type or pick: tapping the calendar icon opens the native picker; choosing a
+   value there writes it back into the text field in DD/MM/YYYY hh:mm AM/PM
+   format. The text field can also be typed into or pasted directly. */
+function openDatePicker(fieldId){
+  const picker = document.getElementById(fieldId + 'Picker');
+  if(!picker) return;
+  // Seed the picker with whatever is currently in the text field, so it opens
+  // near the right date instead of jumping back to the range min.
+  const textEl = document.getElementById(fieldId);
+  const current = textEl ? parseLogDate(textEl.value) : null;
+  if(current) picker.value = toInputValue(current);
+  if(picker.showPicker){
+    try{ picker.showPicker(); }catch(e){ picker.focus(); picker.click(); }
+  } else {
+    picker.focus();
+    picker.click();
+  }
+}
+function onPickerChange(fieldId){
+  const picker = document.getElementById(fieldId + 'Picker');
+  const textEl = document.getElementById(fieldId);
+  if(!picker || !textEl) return;
+  const d = new Date(picker.value);
+  if(!isNaN(d)){
+    textEl.value = fmtDateForStorage(d);
+    recalcCalculator();
+  }
+}
+function onCalcDateTextChange(){
+  recalcCalculator();
+}
+
 function getCalcRange(){
   const records = vehicleFuelRecords(activeVehicle);
   const startEl = document.getElementById('calcStart');
   const endEl = document.getElementById('calcEnd');
   if(!startEl || !endEl) return {range:[], records, startDT:null, endDT:null};
-  let startDT = new Date(startEl.value);
-  let endDT = new Date(endEl.value);
-  if(isNaN(startDT) || isNaN(endDT)) return {range:[], records, startDT:null, endDT:null};
+  let startDT = parseLogDate(startEl.value);
+  let endDT = parseLogDate(endEl.value);
+  if(!startDT || !endDT) return {range:[], records, startDT:null, endDT:null};
   if(startDT > endDT){ [startDT, endDT] = [endDT, startDT]; }
   // Inclusive on both ends — a reading exactly at the boundary must count.
   const range = records.filter(r => r.dateObj >= startDT && r.dateObj <= endDT);
@@ -792,6 +851,20 @@ function recalcCalculator(){
   const {range, startDT, endDT} = getCalcRange();
   const noteEl = document.getElementById('calcNote');
   if(!noteEl) return;
+
+  if(!startDT || !endDT){
+    document.getElementById('res_entries').textContent = '—';
+    document.getElementById('res_fuel').textContent = '—';
+    document.getElementById('res_consumption').textContent = '—';
+    document.getElementById('res_distance').textContent = '—';
+    document.getElementById('res_mileage').textContent = '—';
+    document.getElementById('calcMatchedRows').innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--muted);">Enter a valid date &amp; time, e.g. 07/07/2026 06:33 AM.</td></tr>`;
+    noteEl.textContent = '⚠ Could not read that date/time. Type or paste it as DD/MM/YYYY hh:mm AM/PM (e.g. 07/07/2026 06:33 AM), or tap the calendar icon to pick it.';
+    noteEl.className = 'field-note warn';
+    const saveBtn = document.getElementById('calcSaveBtn');
+    if(saveBtn) saveBtn.disabled = true;
+    return;
+  }
 
   const {fuelLtr, consumption, rowsMeta} = computeRangeTotals(range, activeVehicle);
   const entriesCount = range.length;
